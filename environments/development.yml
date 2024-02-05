@@ -1,0 +1,52 @@
+# configuration file for development environment
+
+# the logger engine to use
+# console: log messages to STDOUT
+# file:    log message to a file in log/
+logger: "console"
+
+# the log level for this environment
+# core is the lowest, it shows Dancer2's core log messages as well as yours
+# (debug, info, warning and error)
+log: "debug"
+
+# should Dancer2 show a stacktrace when an 5xx error is caught?
+# if set to yes, public/500.html will be ignored and either
+# views/500.tt, 'error_template' template, or a default error template will be used.
+show_stacktrace: 1
+
+client_files:
+    directory: client_files/infiles 
+    archive: client_files/archive 
+
+# How to get data from client files
+client_weather_fields:
+  client_a:
+    file:
+      type: json
+      times_convert_func: yyyy_mm_dd_convert_func 
+    wanted_fields:
+     - longitude: longitude
+       latitude: latitude
+       timezone: timezone
+     - daily:
+          time: time
+          temperature_2m_max: temperature
+          precipitation_probability_max: precipitation_chance
+          wind_speed_10m_max: wind_speed
+          wind_direction_10m_dominant: wind_direction
+  client_b:
+    file:
+      type: xml
+      times_convert_func: yyyy_mm_dd_convert_func 
+    wanted_fields:
+     - longitude: longitude
+       latitude: latitude
+       timezone: timezone
+     - daily:
+          time: time
+          temperature_2m_max: temperature
+          precipitation_probability_max: precipitation_chance
+          wind_speed_10m_max: wind_speed
+          wind_direction_10m_dominant: wind_direction
+# End
