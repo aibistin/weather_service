@@ -38,6 +38,13 @@ cpanm Task::Dancer2
 
 [Carton Docs](https://metacpan.org/pod/Carton#TUTORIAL)
 
+#### Create the SQLite Database
+
+```bash
+# Froom the project directory
+perl data/create_db.pl 
+```
+
 
 #### Run Some Unit Tests and Route Tests
 
@@ -50,13 +57,13 @@ prove -v t/
 Run Tests Individually
 
 ```bash
-prove -v  t/00_test_parse_weather_xml.t
-prove -v  t/00_test_parse_weather_json.t
-prove -v  003_base.t  
-prove -v  004_client_file_route.t 
+prove -v  t/001_test_parse_weather_xml.t
+prove -v  t/002_test_parse_weather_json.t
+...
+prove -v  t/005_client_file_route.t 
 ```
 
-Run the weather_service application from the project directory
+Run the application from the project directory.
 
 ```bash
 # Runs in localhost
@@ -67,6 +74,7 @@ plackup -p 5000 bin/app.psgi
 Use `curl` to test the parsing app
 
 **Note**: Two clients have been setup for testing. 'client_a' and 'client_b'
+The client files are located in **client_files/infiles/client_[a]** etc.
 
 ```bash
 curl --request GET --url http://0.0.0.0:5000/client/client_a
@@ -82,4 +90,5 @@ curl --request GET --url http://0.0.0.0:5000/client/client_b
 3. Store parsed data to SQLite
 4. Call Weather API's directly
 5. Process hourly weather.
+6. Lots more...
 

@@ -49,4 +49,12 @@ client_weather_fields:
           precipitation_probability_max: precipitation_chance
           wind_speed_10m_max: wind_speed
           wind_direction_10m_dominant: wind_direction
-# End
+#
+plugins:                 
+  Database:             
+    driver: SQLite
+    database: data/weather.db
+    dbi_params:
+      RaiseError: 1
+      AutoCommit: 1
+

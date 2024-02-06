@@ -3,9 +3,17 @@ use Dancer2;
 use Data::Dumper;
 use DateTime;
 use Path::Tiny qw/path/;
-# Local Modules 
+use Dancer2::Plugin::Database;
+
+# Local Modules
 use Parse_Weather_JSON;
 use Parse_Weather_XML;
+use WeatherUtils qw/
+    parse_client_file
+    parse_client_files
+    insert_data_to_database 
+    get_database_satement_handles
+/;
 
 # All responses will be in JSON format
 set serializer => 'JSON';
@@ -14,19 +22,45 @@ our $VERSION = '0.1';
 my %converter_function;
 my $base_client_dir  = config->{client_files}{directory};
 my $base_archive_dir = config->{client_files}{archive};
+my $sql              = 'select id, title, text from entries order by id desc';
+
+# my $sth = database->prepare($sql);
+# $sth->execute;
+
+my $insert_location_sql = qq{
+    INSERT INTO location_coordinate ( latitude, longitude )
+    VALUES (?,?);
+};
+
+my $insert_weather_sql = qq{
+    INSERT OR REPLACE INTO weather_data ( 
+    location_id, recorded_date, temperature,
+    wind_speed, wind_direction, precipitation_chance
+    ) 
+    VALUES (?,?,?,?,?,?);
+};
+
+my $select_location_id_sql = qq{
+    SELECT id FROM location_coordinate
+    WHERE  latitude = ? AND  longitude = ?;
+};
+
+my $select_weather_sql = qq{
+    SELECT *  FROM weather_data wd
+    INNER JOIN location_coordinate lc
+    ON wd.location_id = lc.id 
+    ORDER BY wd.recorded_date DESC;
+};
 
 get '/' => sub {
     debug "Inside base '/' directory";
-    return {
-        wrong_url => "Try the '/client/:name' path instead",
-    }
+    return { wrong_url => "Try the '/client/:name' path instead", };
 };
-
 
 get '/client/:name' => sub {
 
     my $client_name = route_parameters->get('name');
-    my $client_dir = path( $base_client_dir . "/$client_name" );
+    my $client_dir  = path( $base_client_dir . "/$client_name" );
     debug "Client dir: " . $client_dir->stringify;
 
     if ( ( not $client_dir->exists ) or ( not $client_dir->is_dir ) ) {
@@ -36,14 +70,15 @@ get '/client/:name' => sub {
             path    => request->path,
             message => "No file directory for client $client_name"
         };
-        pass;
     }
     my $file_type = config->{client_weather_fields}{$client_name}{file}{type};
 
     my @client_weather_files = $client_dir->children(qr/\.$file_type\z/);
+
     debug "Client Files: " . $_->stringify for @client_weather_files;
+
     if ( not @client_weather_files ) {
-        warning "Client $client_name has no $file_type weather files now";
+        warning "Client $client_name has no $file_type weather files";
         return {
             client  => $client_name,
             message => "Has no $file_type weather files",
@@ -62,26 +97,25 @@ get '/client/:name' => sub {
       $converter_function{$times_convert_function_name};
     debug "Wanted Fields: " . Dumper($wanted_fields) . "\n";
 
-    my @requested_weather_data;
+    #TODO Validate all input data
+    my $requested_weather_data = eval {
+        parse_client_files( \@client_weather_files, $wanted_fields,
+            $file_type );
+    };
 
-    for my $weather_file (@client_weather_files) {
-        info "Weather file: " . $weather_file->basename;
-        my $weather_data_h = parse_client_file(
-            {
-                file_type           => $file_type,
-                weather_file         => $weather_file,
-                wanted_fields_config => $wanted_fields,
-            }
-        );
-        push  @requested_weather_data ,$weather_data_h;
-        #TODO Move eache parsed file to the archive
+    if ($@) {
+        error "Error parsing client files: $@";
     }
+    else {
+        eval { insert_data_to_database($requested_weather_data, database()) };
+        error "Error inserting weather data to database: $@" if $@;
+    }
+
     return {
         client_name  => $client_name,
-        weather_data => \@requested_weather_data
+        weather_data => $requested_weather_data
     };
 };
-
 
 # Default route
 any qr{.*} => sub {
@@ -95,50 +129,21 @@ any qr{.*} => sub {
 
 };
 
-
 hook before_serializer => sub {
     my $content = shift;
-    info "Data before serialize: " . Dumper($content) . "\n";
+    debug "Data before serialize: " . Dumper($content) . "\n";
+};
+
+hook database_error => sub {
+    my $error = shift;
+    die $error;
 };
 
 #---------------------------------------------------------------
 #  Helper Functions
 #---------------------------------------------------------------
-# parse_client_file 
-# Pass: {
-#    {
-#      file_type,   => 'json'   # json or xml for now
-#      weather_file => $weather_file,  # Path::Tiny obj.
-#      wanted_fields_config => [{...},{...}],
-#    }
-# Returns:
-#  Requested parsed weather data in JSON format
-#---------------------------------------------------------------
-sub parse_client_file {
-    my $param = shift;
-    my ($parser,$error_msg);
 
-    my %parser_params = (
-        wanted_fields_config          => $param->{wanted_fields_config},
-        $param->{file_type} . '_data' => $param->{weather_file}->slurp,
-    );
-
-    if ( lc $param->{file_type} eq 'json' ) {
-        $parser = eval{Parse_Weather_JSON->new( \%parser_params )};
-        $error_msg = $@;
-    }
-    elsif ( lc $param->{file_type} eq 'xml' ) {
-        $parser = eval{Parse_Weather_XML->new( \%parser_params )};
-        $error_msg = $@;
-    }
-    else {
-        error
-          "Only accepting json and xml file types. Not '$param->{file_type}'";
-    }
-    error "Error in $param->{file_type} parser: $error_msg" if $error_msg;
-    return $parser ? $parser->parse_weather_data() : undef;
-}
-
+# Converts the date to UTC Date Time
 %converter_function = (
     yyyy_mm_dd_convert_func => sub {
         my ( $times_in, $time_zone ) = @_;

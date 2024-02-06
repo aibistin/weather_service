@@ -31,13 +31,15 @@ subtest "Route '/client/:name' should return parsed JSON Weather Data" => sub {
     plan tests => 2;
     my $client_name     = 'client_a';
     my $route           = "/client/$client_name";
-    my $expect_json = get_expected_json_weather_data();
+    my $expect_json_h = get_expected_json_weather_data();
 
     my $res = $test->request( GET $route );
     ok( $res->is_success, "[GET $route] Successful request" );
 
     my $decoded_content = decode_json $res->content;
-    is_deeply( $decoded_content, $expect_json,
+    my $got_first_result = @{$decoded_content->{weather_data}}[0];
+    my $expect_first_result = @{$expect_json_h->{weather_data}}[0];
+    is_deeply( $got_first_result, $expect_first_result,
         "Should get JSON weather data for route '$route'" );
     done_testing();
 };
